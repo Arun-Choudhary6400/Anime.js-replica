@@ -165,8 +165,8 @@ export const MODULES_CONFIG = {
     scale: 1,
     group: "top",
     speed: 0.4,
-    animation: "spinZ",
-    // animation: "svg",
+    // animation: "spinZ",
+    animation: "svg",
   }, // corrected position
   "module-stagger-01.glb": {
     position: [0, 2.25, 0],
