@@ -42,7 +42,12 @@ const DeviceAssembly = ({ autoRotate = true, exploded = false, angle = 0 }) => {
       rotation-z={0}
     >
       {Object.entries(config).map(([fileName, config]) => (
-        <Module key={fileName} fileName={fileName} config={config} />
+        <Module
+          key={fileName}
+          fileName={fileName}
+          config={config}
+          wireframeMode="edges"
+        />
       ))}
     </group>
   );

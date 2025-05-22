@@ -3,17 +3,29 @@ import { Canvas } from "@react-three/fiber";
 import { Suspense } from "react";
 import DeviceAssembly from "./DeviceAssembly";
 import Box from "@mui/material/Box";
+// import * as THREE from "three";
+import * as THREE from "three/webgpu";
+// import WebGPURenderer from 'three/examples/jsm/renderers/webgpu/nodes/WebGPURenderer';
 
 export const ModularDeviceViewer = ({
   exploded = false,
   initialAngle = Math.PI * 0.25,
   autoRotate = true,
-  backgroundColor = "#242424",
 }) => {
   return (
     <Box sx={{ width: "100%", height: "100vh" }}>
-      <Canvas shadows dpr={[1, 2]} style={{backgroundColor: "#242424"}}>
-        <color attach="background" args={[backgroundColor]} />
+      <Canvas
+        shadows
+        dpr={[1, 2]}
+        gl={async (props) => {
+          const renderer = new THREE.WebGPURenderer(props as any);
+          renderer.toneMapping = THREE.ACESFilmicToneMapping;
+          renderer.setPixelRatio(devicePixelRatio);
+          await renderer.init();
+          return renderer;
+        }}
+      >
+        <color attach="background" args={["#DAD5D0"]} />
         <PerspectiveCamera
           makeDefault
           position={[0, 0, exploded ? 15 : 6]}

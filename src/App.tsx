@@ -16,11 +16,7 @@ function App() {
           <GLBLoader modelUrl="/models/module-easing-01.glb" />
         </Canvas> */}
         {/* <ModularDeviceViewer /> */}
-        <ModularDeviceViewer
-          exploded={false}
-          autoRotate={false}
-          backgroundColor="#f0efea"
-        />
+        <ModularDeviceViewer exploded={false} autoRotate={false} />
       </Box>
     </>
   );

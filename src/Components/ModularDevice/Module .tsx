@@ -223,7 +223,7 @@ export const MODULES_CONFIG = {
     animation: "orbitY",
     orbitSpeed: (2 * Math.PI) / 1.5, // rad/s → one full turn in 10 s
     orbitRadius: 1, // 1 unit = 10 cm
-    staggerDelay: -0.2, // 0.2 s between each clone’s start
+    staggerDelay: -0.2, // 0.2 s between each clone's start
     loopDelay: 1.3,
     facePivot: true,
   }, // corrected position NEED MULTIPLE 5x
@@ -388,11 +388,21 @@ export const EXPLODED_VIEW_CONFIG = {
   }, // corrected position
 };
 
+// Wireframe mode types
+type WireframeMode = "normal" | "wireframe" | "edges" | "outlined";
+
 // Individual module component
-const Module = ({ fileName, config }: { fileName: string; config: any }) => {
+const Module = ({
+  fileName,
+  config,
+  wireframeMode = "normal",
+}: {
+  fileName: string;
+  config: any;
+  wireframeMode?: WireframeMode;
+}) => {
   const meshRef = useRef<THREE.Object3D>(null!);
   const meshRefs = useRef<THREE.Object3D[]>([]);
-  // const { scene } = useGLTF(`${MODEL_PATH_PREFIX}${fileName}`);
   const { scene: original } = useGLTF(`${MODEL_PATH_PREFIX}${fileName}`);
   const { position, scale, multiple, otherPositions, otherRotation } = config;
 
@@ -425,34 +435,159 @@ const Module = ({ fileName, config }: { fileName: string; config: any }) => {
     return [];
   }, [config]);
 
+  // Wireframe materials
+  const wireframeMaterials = useMemo(
+    () => ({
+      normal: new THREE.MeshStandardMaterial({
+        color: 0x2f2e2b,
+        flatShading: true,
+        roughness: 1,
+        metalness: 0,
+      }),
+      wireframe: new THREE.MeshBasicMaterial({
+        color: 0x252423,
+        wireframe: true,
+        transparent: false,
+      }),
+      background: new THREE.MeshBasicMaterial({
+        color: 0xdad5d0,
+        // blending: 3,
+        transparent: false,
+        opacity: 1,
+      }),
+      edges: new THREE.LineBasicMaterial({
+        color: 0x252423,
+        linewidth: 2,
+        depthTest: true, // Ensure proper depth testing
+      }),
+      outline: new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        side: THREE.BackSide,
+        transparent: false, // Make opaque
+        opacity: 1,
+      }),
+    }),
+    []
+  );
+
+  // Function to apply wireframe effect to a mesh
+  const applyWireframeEffect = (mesh: THREE.Mesh, parent: THREE.Object3D) => {
+    // Remove existing wireframe children
+    const existingWireframes = parent.children.filter(
+      (child) => child.userData.isWireframe || child.userData.isEdgeLines
+    );
+    existingWireframes.forEach((child) => {
+      if (
+        (child as THREE.Mesh).geometry ||
+        (child as THREE.LineSegments).geometry
+      ) {
+        (
+          (child as THREE.Mesh).geometry ||
+          (child as THREE.LineSegments).geometry
+        ).dispose();
+      }
+      parent.remove(child);
+    });
+
+    switch (wireframeMode) {
+      case "normal":
+        mesh.material = wireframeMaterials.normal;
+        break;
+
+      case "wireframe":
+        mesh.material = wireframeMaterials.wireframe;
+        break;
+
+      case "edges":
+        // Set background material (opaque white)
+        mesh.material = wireframeMaterials.background;
+
+        // Create and add edge lines
+        const edges = new THREE.EdgesGeometry(mesh.geometry, 30);
+        const edgeLines = new THREE.LineSegments(
+          edges,
+          wireframeMaterials.edges
+        );
+        edgeLines.userData.isEdgeLines = true;
+
+        // Ensure edge lines render on top but still respect depth
+        edgeLines.renderOrder = 1;
+        edgeLines.material.depthTest = true;
+        edgeLines.material.depthWrite = false; // Don't write to depth buffer to avoid z-fighting
+
+        parent.add(edgeLines);
+        break;
+
+      case "outlined":
+        // Set white background (opaque)
+        mesh.material = wireframeMaterials.background;
+
+        // Create outline effect
+        const outlineMesh = mesh.clone();
+        outlineMesh.material = wireframeMaterials.outline;
+        outlineMesh.scale.multiplyScalar(1.02);
+        outlineMesh.userData.isWireframe = true;
+        parent.add(outlineMesh);
+
+        // Add edge lines for definition
+        const outlineEdges = new THREE.EdgesGeometry(mesh.geometry, 30);
+        const outlineLines = new THREE.LineSegments(
+          outlineEdges,
+          wireframeMaterials.edges
+        );
+        outlineLines.userData.isEdgeLines = true;
+        outlineLines.renderOrder = 1;
+        outlineLines.material.depthTest = true;
+        outlineLines.material.depthWrite = false;
+        parent.add(outlineLines);
+        break;
+    }
+  };
+
   const scene = useMemo(() => {
     const cloned = original.clone(true); // deep clone
 
-    // cloned.traverse((child) => {
-    //   if ((child as THREE.Mesh).isMesh) {
-    //     const mesh = child as THREE.Mesh;
+    cloned.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        const mesh = child as THREE.Mesh;
 
-    //     // Give it a dark, flat-shaded Standard material
-    //     mesh.material = new THREE.MeshStandardMaterial({
-    //       color: 0x2f2e2d,
-    //       flatShading: true,
-    //       roughness: 1,
-    //       metalness: 0,
-    //     });
+        // Store original material for reference
+        mesh.userData.originalMaterial = mesh.material;
 
-    //     // IMPORTANT: tell Three.js to rebuild normals for flat shading
-    //     mesh.geometry = mesh.geometry.toNonIndexed(); // ensure unique verts
-    //     mesh.geometry.computeVertexNormals();
-    //   }
-    // });
+        // IMPORTANT: tell Three.js to rebuild normals for flat shading
+        mesh.geometry = mesh.geometry.toNonIndexed(); // ensure unique verts
+        mesh.geometry.computeVertexNormals();
+
+        // Apply wireframe effect
+        applyWireframeEffect(mesh, mesh.parent || cloned);
+      }
+    });
 
     return cloned;
-  }, [original]);
+  }, [original, wireframeMode, wireframeMaterials]);
 
-  // Animation
+  // Update wireframe when mode changes
+  useEffect(() => {
+    if (!meshRef.current) return;
 
-  // Animation state
-  const elapsed = useRef(0);
+    meshRef.current.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        const mesh = child as THREE.Mesh;
+        applyWireframeEffect(mesh, mesh.parent || meshRef.current);
+      }
+    });
+
+    // Also update multiple instances
+    meshRefs.current.forEach((meshGroup) => {
+      if (!meshGroup) return;
+      meshGroup.traverse((child) => {
+        if ((child as THREE.Mesh).isMesh) {
+          const mesh = child as THREE.Mesh;
+          applyWireframeEffect(mesh, mesh.parent || meshGroup);
+        }
+      });
+    });
+  }, [wireframeMode, wireframeMaterials]);
 
   const createShapeGeometries = (originalWidth: number) => {
     const shapes: THREE.BufferGeometry[] = [];
@@ -687,6 +822,9 @@ const Module = ({ fileName, config }: { fileName: string; config: any }) => {
     return geometry;
   };
 
+  // Animation state
+  const elapsed = useRef(0);
+
   // Drive animations every frame
   useFrame((_, delta) => {
     const ref = meshRef?.current!;
@@ -725,7 +863,7 @@ const Module = ({ fileName, config }: { fileName: string; config: any }) => {
       case "bounceZ": {
         const h = config.bounceHeight!;
         const T = config.bouncePeriod!;
-        const ω = Math.PI / T; // yields an “abs(sin)” cycle every T seconds
+        const ω = Math.PI / T; // yields an "abs(sin)" cycle every T seconds
         const delay = config.staggerDelay!;
 
         if (config.multiple) {
@@ -812,7 +950,7 @@ const Module = ({ fileName, config }: { fileName: string; config: any }) => {
       case "circularStagger": {
         const h = config.bounceHeight!;
         const T = config.bouncePeriod!;
-        const ω = Math.PI / T; // yields an “abs(sin)” cycle every T seconds
+        const ω = Math.PI / T; // yields an "abs(sin)" cycle every T seconds
         const delay = config.staggerDelay!;
 
         if (config.multiple) {
@@ -921,6 +1059,9 @@ const Module = ({ fileName, config }: { fileName: string; config: any }) => {
                 origY,
                 origZ * scaleEffect
               );
+
+              // Reapply wireframe effect after geometry change
+              applyWireframeEffect(targetMesh, targetMesh.parent || ref);
             }
           } else if (morphProgress.current < 0.1 && originalGeometry.current) {
             // At the beginning of transition, return to original
@@ -932,6 +1073,9 @@ const Module = ({ fileName, config }: { fileName: string; config: any }) => {
               const origScale = targetMesh.userData.originalScale;
               targetMesh.scale.set(origScale.x, origScale.y, origScale.z);
             }
+
+            // Reapply wireframe effect after geometry change
+            applyWireframeEffect(targetMesh, targetMesh.parent || ref);
           }
         }
       }
@@ -940,16 +1084,6 @@ const Module = ({ fileName, config }: { fileName: string; config: any }) => {
         break;
     }
   });
-
-  // useEffect(() => {
-  //   if(!meshRef.current) return;
-  //   animate(meshRef.current.rotation, {
-  //     z: Math.PI * 2,
-  //     duration: 100000,
-  //     easing: "linear",
-  //     loop: true,
-  //   });
-  // }, []);
 
   return (
     <group rotation-y={Math.PI / 1}>
