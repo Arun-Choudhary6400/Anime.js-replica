@@ -438,11 +438,12 @@ const Module = ({
   // Wireframe materials
   const wireframeMaterials = useMemo(
     () => ({
-      normal: new THREE.MeshStandardMaterial({
-        color: 0x2f2e2b,
-        flatShading: true,
-        roughness: 1,
-        metalness: 0,
+      normal: new THREE.MeshToonMaterial({
+        color: "darkgray",
+        toneMapped: true,
+        // flatShading: true,
+        // roughness: 1,
+        // metalness: 0,
       }),
       wireframe: new THREE.MeshBasicMaterial({
         color: 0x252423,
@@ -452,12 +453,21 @@ const Module = ({
       background: new THREE.MeshBasicMaterial({
         color: 0xdad5d0,
         // blending: 3,
+        wireframeLinewidth: 1,
+        reflectivity: 1,
+        refractionRatio: 0.98,
+        lightMapIntensity: 1,
+        aoMapIntensity: 1,
+        wireframeLinejoin: "round",
+        wireframeLinecap: "round",
         transparent: false,
         opacity: 1,
       }),
       edges: new THREE.LineBasicMaterial({
         color: 0x252423,
-        linewidth: 2,
+        linewidth: 1,
+        linecap: "round",
+        linejoin: "round",
         depthTest: true, // Ensure proper depth testing
       }),
       outline: new THREE.MeshBasicMaterial({

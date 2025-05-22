@@ -46,7 +46,7 @@ const DeviceAssembly = ({ autoRotate = true, exploded = false, angle = 0 }) => {
           key={fileName}
           fileName={fileName}
           config={config}
-          wireframeMode="edges"
+          wireframeMode="normal"
         />
       ))}
     </group>
